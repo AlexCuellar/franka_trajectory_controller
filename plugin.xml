@@ -1,0 +1,16 @@
+<library path="lib/libtraj_control">
+  <class name="traj_control/TestPoseController"
+         type="traj_control::TestPoseController"
+         base_class_type="controller_interface::ControllerBase">
+    <description>
+      Some text to describe what your controller is doing
+    </description>
+  </class>
+  <class name="traj_control/TestVelController"
+         type="traj_control::TestVelController"
+         base_class_type="controller_interface::ControllerBase">
+    <description>
+      Some text to describe what your controller is doing
+    </description>
+  </class>
+</library>
