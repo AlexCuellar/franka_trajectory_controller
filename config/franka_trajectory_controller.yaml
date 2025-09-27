@@ -1,0 +1,7 @@
+test_pose_controller:
+    type: franka_trajectory_controller/TestPoseController
+    arm_id: $(arg arm_id)
+
+test_vel_controller:
+    type: franka_trajectory_controller/TestVelController
+    arm_id: $(arg arm_id)

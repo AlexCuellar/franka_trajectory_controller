@@ -1,6 +1,6 @@
 // Copyright (c) 2023 Franka Robotics GmbH
 // Use of this source code is governed by the Apache-2.0 license, see LICENSE
-#include <traj_control/test_vel_controller.h>
+#include <franka_trajectory_controller/test_vel_controller.h>
 
 #include <array>
 #include <cmath>
@@ -14,7 +14,7 @@
 #include <pluginlib/class_list_macros.h>
 #include <ros/ros.h>
 
-namespace traj_control {
+namespace franka_trajectory_controller {
 
 bool TestVelController::init(hardware_interface::RobotHW* robot_hardware,
                                               ros::NodeHandle& node_handle) {
@@ -152,5 +152,5 @@ void TestVelController::stopping(const ros::Time& /*time*/) {
 
 }  // namespace franka_example_controllers
 
-PLUGINLIB_EXPORT_CLASS(traj_control::TestVelController,
+PLUGINLIB_EXPORT_CLASS(franka_trajectory_controller::TestVelController,
                        controller_interface::ControllerBase)

@@ -15,7 +15,7 @@
 
 #include <franka_hw/franka_cartesian_command_interface.h>
 
-namespace traj_control {
+namespace franka_trajectory_controller {
 
 class TestPoseController
     : public controller_interface::MultiInterfaceController<franka_hw::FrankaPoseCartesianInterface,

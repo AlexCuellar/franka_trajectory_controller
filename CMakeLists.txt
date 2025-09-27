@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.4)
-project(traj_control)
+project(franka_trajectory_controller)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 14)
@@ -50,7 +50,7 @@ list_insert_in_workspace_order(catkin_INCLUDE_DIRS ${Franka_INCLUDE_DIRS} ${catk
 
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES traj_control
+  LIBRARIES franka_trajectory_controller
   CATKIN_DEPENDS
     controller_interface
     dynamic_reconfigure
@@ -71,12 +71,12 @@ catkin_package(
   DEPENDS Franka
 )
 
-add_library(traj_control
+add_library(franka_trajectory_controller
   src/test_pose_controller.cpp
   src/test_vel_controller.cpp
 )
 
-# add_dependencies(traj_control
+# add_dependencies(franka_trajectory_controller
 #   ${${PROJECT_NAME}_EXPORTED_TARGETS}
 #   ${catkin_EXPORTED_TARGETS}
 #   ${PROJECT_NAME}_generate_messages_cpp
@@ -84,16 +84,16 @@ add_library(traj_control
 #   ${PROJECT_NAME}_gencfg
 # )
 
-target_link_libraries(traj_control PUBLIC
+target_link_libraries(franka_trajectory_controller PUBLIC
   ${Franka_LIBRARIES}
   ${catkin_LIBRARIES}
 )
 
-target_include_directories(traj_control SYSTEM PUBLIC
+target_include_directories(franka_trajectory_controller SYSTEM PUBLIC
   ${EIGEN3_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
 )
-target_include_directories(traj_control PUBLIC
+target_include_directories(franka_trajectory_controller PUBLIC
   include
 )
 
@@ -116,7 +116,7 @@ target_include_directories(traj_control PUBLIC
 # )
 
 ## Installation
-install(TARGETS traj_control
+install(TARGETS franka_trajectory_controller
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
@@ -148,10 +148,10 @@ if(CLANG_TOOLS)
     ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h
   )
-  add_format_target(traj_control FILES ${SOURCES} ${HEADERS})
-  add_tidy_target(traj_control
+  add_format_target(franka_trajectory_controller FILES ${SOURCES} ${HEADERS})
+  add_tidy_target(franka_trajectory_controller
     FILES ${SOURCES}
-    DEPENDS traj_control
+    DEPENDS franka_trajectory_controller
   )
 endif()
 

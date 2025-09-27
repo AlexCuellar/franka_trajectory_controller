@@ -1,7 +1,0 @@
-test_pose_controller:
-    type: traj_control/TestPoseController
-    arm_id: $(arg arm_id)
-
-test_vel_controller:
-    type: traj_control/TestVelController
-    arm_id: $(arg arm_id)

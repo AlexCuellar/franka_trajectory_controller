@@ -1,6 +1,6 @@
 // Copyright (c) 2023 Franka Robotics GmbH
 // Use of this source code is governed by the Apache-2.0 license, see LICENSE
-#include <traj_control/test_pose_controller.h>
+#include <franka_trajectory_controller/test_pose_controller.h>
 
 #include <cmath>
 #include <memory>
@@ -13,7 +13,7 @@
 #include <pluginlib/class_list_macros.h>
 #include <ros/ros.h>
 
-namespace traj_control {
+namespace franka_trajectory_controller {
 
 bool TestPoseController::init(hardware_interface::RobotHW* robot_hardware,
                                           ros::NodeHandle& node_handle) {
@@ -129,5 +129,5 @@ void TestPoseController::update(const ros::Time& /* time */, const ros::Duration
 
 }  
 
-PLUGINLIB_EXPORT_CLASS(traj_control::TestPoseController,
+PLUGINLIB_EXPORT_CLASS(franka_trajectory_controller::TestPoseController,
                        controller_interface::ControllerBase)

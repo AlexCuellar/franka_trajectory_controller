@@ -16,7 +16,7 @@
 
 #include <realtime_tools/realtime_buffer.h>
 
-namespace traj_control {
+namespace franka_trajectory_controller {
 
 class TestVelController : public controller_interface::MultiInterfaceController<
                                                franka_hw::FrankaVelocityCartesianInterface,
