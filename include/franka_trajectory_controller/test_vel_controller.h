@@ -29,6 +29,12 @@ class TestVelController : public controller_interface::MultiInterfaceController<
   int traj_idx;
   bool done_with_traj;
   double epsilon;
+  double dt;
+  double print_rate;
+  double time_since_print;
+  double vel_;
+  double v_max_;
+  double a_max_;
   std::array<double, 6> last_command;
   void traj_callback(const geometry_msgs::PoseArrayConstPtr& msg);
   

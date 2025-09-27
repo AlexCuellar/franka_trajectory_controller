@@ -38,7 +38,7 @@ class TestTrajNode:
             points = []
             center_x = self.robot_init_pose.position.x + radius
             center_y = self.robot_init_pose.position.y
-            center_z = self.robot_init_pose.position.z
+            center_z = self.robot_init_pose.position.z + .1
             for i in range(num_points):
                 angle = 2 * np.pi * i / num_points
                 x = center_x - radius * np.cos(angle)
@@ -58,7 +58,7 @@ class TestTrajNode:
                 pose.orientation.z = quat[2]
                 pose.orientation.w = quat[3]
                 self.traj.poses.append(pose)
-
+            self.traj.poses *= 5
             self.traj.header.stamp = rospy.Time.now()
             self.pub.publish(self.traj)
             self.robot_init_pose = None

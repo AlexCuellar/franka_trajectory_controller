@@ -65,6 +65,12 @@ bool TestVelController::init(hardware_interface::RobotHW* robot_hardware,
   ROS_INFO("CONTROLLER SUBSCRIBER CREATED");
   done_with_traj = true;
   epsilon = 0.002;
+  dt = 0.3;
+  print_rate = .01;
+  time_since_print = 0.0;
+  v_max_ = 0.2;
+  vel_ = v_max_*.5;
+  a_max_ = 0.0004; 
   return true;
 }
 
@@ -74,10 +80,13 @@ void TestVelController::traj_callback(const geometry_msgs::PoseArrayConstPtr& ms
     return;
   }
   traj = *msg;
-  command_buffer_.writeFromNonRT(traj);
   std::cout << "Received new trajectory with " << traj.poses.size() << " points." << std::endl;
-  std::cout << "First point: (" << traj.poses[0].position.x << ", " << traj.poses[0].position.y << ", " << traj.poses[0].position.z << ")" << std::endl;
+  std::cout << "First pointime: (" << traj.poses[0].position.x << ", " << traj.poses[0].position.y << ", " << traj.poses[0].position.z << ")" << std::endl;
   done_with_traj = false;
+  traj_idx = 0;
+  time_since_print = 0.0;
+  elapsed_time_ = ros::Duration(0.0);
+  command_buffer_.writeFromNonRT(traj);
 }
 
 void TestVelController::starting(const ros::Time& /* time */) {
@@ -86,10 +95,12 @@ void TestVelController::starting(const ros::Time& /* time */) {
 }
 
 void TestVelController::update(const ros::Time& /* time */, const ros::Duration& period) {
+  // ESTABLISH CURRENT POSE AND TIME
   std::array<double, 16> current_pose = state_handle_->getRobotState().O_T_EE_d;
+  elapsed_time_ += period;
+  double time = elapsed_time_.toSec();
+  // IF DONE WITH TRAJ, SEND ZERO VELOCITIES AND SEND CURRENT POSE
   if(done_with_traj){
-    // std::array<double, 6> command = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
-    // velocity_cartesian_handle_->setCommand(command);
     const geometry_msgs::PoseArray& traj = *command_buffer_.readFromRT();
     geometry_msgs::Pose current_pose_msg;
     current_pose_msg.position.x = current_pose[12];
@@ -98,8 +109,7 @@ void TestVelController::update(const ros::Time& /* time */, const ros::Duration&
     pose_pub_.publish(current_pose_msg);
     return;
   }
-  double v_max = 0.2;
-  double a_max = 0.0005;
+  // GET CURRENT AND DESIRED POSE, COMPUTE DISTANCE TO GOAL
   double x_curr = current_pose[12];
   double y_curr = current_pose[13];
   double z_curr = current_pose[14];
@@ -110,36 +120,53 @@ void TestVelController::update(const ros::Time& /* time */, const ros::Duration&
   double dy = y_des - y_curr;
   double dz = z_des - z_curr;
   double dist_to_goal_squared = (x_curr - x_des)*(x_curr - x_des) + (y_curr - y_des)*(y_curr - y_des) + (z_curr - z_des)*(z_curr - z_des);
+  // IF NOT REACHED FIRST POINT IN THE TRAJECTORY, DO NOT COUNT UP TIME
+  if(traj_idx == 0 and dist_to_goal_squared > epsilon*epsilon){
+    elapsed_time_ = ros::Duration(0.0);
+    time = 0.0;
+  }
+  // IF REACHED GOAL, SWITCH TO NEXT POINT
   if(dist_to_goal_squared < epsilon*epsilon){
+    ROS_INFO("Triggered By Time: trigger_time: %f, time: %f, idx: %d", dt*(traj_idx), time, traj_idx);
     traj_idx++;
+    // RECALCULATE GOAL AND DISTANCE TO GOAL
     x_des = traj.poses[traj_idx].position.x;
     y_des = traj.poses[traj_idx].position.y;
     z_des = traj.poses[traj_idx].position.z;
     dx = x_des - x_curr;
     dy = y_des - y_curr;
     dz = z_des - z_curr;
+    double dist_to_goal_squared = (x_curr - x_des)*(x_curr - x_des) + (y_curr - y_des)*(y_curr - y_des) + (z_curr - z_des)*(z_curr - z_des);
+    // SET VELOCITY BASED ON DISTANCE TO GOAL AND TIME TO NEXT POINT
+    vel_ = std::min({v_max_, std::sqrt(dist_to_goal_squared) / std::max({dt*(traj_idx) - time, .00001})});
+    // IF AT END OF TRAJ, SET DONE FLAG
     if(traj_idx >= traj.poses.size()){
       ROS_INFO("Done with trajectory, waiting for new trajectory...");
-      traj.poses.clear();
-      traj_idx = 0;
       done_with_traj = true;
       return;
     }
   }
+  // COMPUTE AND SEND COMMAND
+  // Normalize direction and multiply by vel_
   double norm = std::max({std::sqrt(dx*dx + dy*dy + dz*dz), .000001});
-  dx = v_max*dx/norm;
-  dy = v_max*dy/norm;
-  dz = v_max*dz/norm;
+  dx = vel_*dx/norm;
+  dy = vel_*dy/norm;
+  dz = vel_*dz/norm;
   std::array<double, 6> command = {{dx, dy, dz, 0.0, 0.0, 0.0}};
-  if(dist_to_goal_squared < epsilon*epsilon){
-    std::cout << "t: " << traj_idx << " v: " << v_max << " x_curr: " << x_curr << " y_curr: " << y_curr << " z_curr: " << z_curr << " -- x_des: " << x_des << " y_des: " << y_des << " z_des: " << z_des << " -- dx: " << dx << " dy: " << dy << " dz: " << dz << " dist^2: " << dist_to_goal_squared << std::endl;
+  // Enforce acceleration limits
+  if(command[0] - last_command[0] >  a_max_){command[0] = last_command[0] + a_max_;}
+  if(command[0] - last_command[0] < -a_max_){command[0] = last_command[0] - a_max_;}
+  if(command[1] - last_command[1] >  a_max_){command[1] = last_command[1] + a_max_;}
+  if(command[1] - last_command[1] < -a_max_){command[1] = last_command[1] - a_max_;}
+  if(command[2] - last_command[2] >  a_max_){command[2] = last_command[2] + a_max_;}
+  if(command[2] - last_command[2] < -a_max_){command[2] = last_command[2] - a_max_;}
+  // PRINT INFO
+  if(time - time_since_print > print_rate){
+    time_since_print = time;
+    double v_err = std::sqrt((command[0] - dx)*(command[0] - dx) + (command[1] - dy)*(command[1] - dy) + (command[2] - dz)*(command[2] - dz));
+    std::cout << "time: " << time << " traj_idx: " << traj_idx << " vel: " << vel_ << " v_err: " << v_err << " dist: " << std::sqrt(dist_to_goal_squared) << " -- dx: " << dx << " dy: " << dy << " dz: " << dz << " -- x_des: " << x_des << " y_des: " << y_des << " z_des: " << z_des << std::endl;
   }
-  if(command[0] - last_command[0] >  a_max){command[0] = last_command[0] + a_max;}
-  if(command[0] - last_command[0] < -a_max){command[0] = last_command[0] - a_max;}
-  if(command[1] - last_command[1] >  a_max){command[1] = last_command[1] + a_max;}
-  if(command[1] - last_command[1] < -a_max){command[1] = last_command[1] - a_max;}
-  if(command[2] - last_command[2] >  a_max){command[2] = last_command[2] + a_max;}
-  if(command[2] - last_command[2] < -a_max){command[2] = last_command[2] - a_max;}
+  // SEND COMMAND
   velocity_cartesian_handle_->setCommand(command);
   last_command = command;
 }
