@@ -13,6 +13,7 @@
 #include <ros/time.h>
 #include <ros/subscriber.h>
 #include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/PoseStamped.h>
 
 #include <realtime_tools/realtime_buffer.h>
 
