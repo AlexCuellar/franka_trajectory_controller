@@ -60,12 +60,13 @@ bool TestVelController::init(hardware_interface::RobotHW* robot_hardware,
   traj.poses.clear();
   std::array<double, 6> last_command = {{0, 0.0, 0, 0.0, 0.0, 0.0}};
   pose_pub_ = node_handle.advertise<geometry_msgs::PoseStamped>("current_pose", 1);
+  traj_complete_pub_ = node_handle.advertise<std_msgs::Bool>("traj_complete", 1);
   ROS_INFO("CREATING CONTROLLER SUBSCRIBER");
   sub_ = node_handle.subscribe<geometry_msgs::PoseArray>("trajectories", 1, &TestVelController::traj_callback, this);
   ROS_INFO("CONTROLLER SUBSCRIBER CREATED");
   done_with_traj = true;
-  epsilon = 0.002;
-  dt = 0.3;
+  epsilon = 0.007;
+  dt = 0.2;
   print_rate = .05;
   time_since_print = 0.0;
   v_max_ = 0.15;
@@ -156,6 +157,9 @@ void TestVelController::update(const ros::Time& /* time */, const ros::Duration&
       // IF AT END OF TRAJ, SET DONE FLAG
       if(traj_idx >= traj.poses.size()){
         ROS_INFO("Done with trajectory, waiting for new trajectory...");
+        std_msgs::Bool traj_complete_msg;
+        traj_complete_msg.data = true;
+        traj_complete_pub_.publish(traj_complete_msg);
         done_with_traj = true;
         return;
       }

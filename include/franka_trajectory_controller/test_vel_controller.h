@@ -14,6 +14,7 @@
 #include <ros/subscriber.h>
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <std_msgs/Bool.h>
 
 #include <realtime_tools/realtime_buffer.h>
 
@@ -47,6 +48,7 @@ class TestVelController : public controller_interface::MultiInterfaceController<
   geometry_msgs::PoseArray traj;
   ros::Subscriber sub_;
   ros::Publisher pose_pub_;
+  ros::Publisher traj_complete_pub_;
 
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   realtime_tools::RealtimeBuffer<geometry_msgs::PoseArray> command_buffer_;
