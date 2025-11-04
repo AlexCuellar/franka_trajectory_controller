@@ -11,45 +11,47 @@ import termios
 import tty
 from copy import deepcopy
 import os
+from scipy.spatial.transform import Rotation as R
+import time
+
 
 class PoseRecorder:
     def __init__(self):
         rospy.init_node('pose_recorder', anonymous=True)
 
         # Parameters
-        self.pose_topic = rospy.get_param('~pose_topic', '/franka_state_controller/franka_states')
+        self.pose_topic = rospy.get_param('~pose_topic', '/franka_state_controller/O_T_EE')
         self.output_topic = rospy.get_param('~output_topic', '/recorded_trajectories')
         self.label_topic = rospy.get_param('~label_topic', '/recorded_labels')
-        self.output_csv = rospy.get_param('~output_csv', 'recorded_poses.csv')
+        self.output_csv = rospy.get_param('~output_csv', '/home/alex/franka_ws/src/franka_trajectory_controller/data/datafranka_wsrecorded_poses.csv')
         self.base_frame = rospy.get_param('~base_frame', 'panda_link0')
+        self.dt = rospy.get_param('~recording_dt', 0.1)  # seconds
 
         # ROS pub/sub
-        self.pose_sub = rospy.Subscriber(self.pose_topic, FrankaState, self.pose_callback)
+        self.pose_sub = rospy.Subscriber(self.pose_topic, PoseStamped, self.pose_callback)
         self.pose_pub = rospy.Publisher(self.output_topic, PoseArray, queue_size=10)
         self.label_pub = rospy.Publisher(self.label_topic, Float32MultiArray, queue_size=10)
 
         # Internal buffers
-        self.latest_pose = None
         self.poses = []
         self.labels = []          # list of [l1, l2, l3]
+        self.active_doing_task = 0 # 0 if not doing task, 1 if doing task
+        self.doing_task = []       # buffer
+        self.doing_task_buffer = 7  # number of steps before end of task to mark as complete (This is a helper state for diffusion models)
+        self.current_pose = None
         self.active_labels = [0,0,0]  # current one-hot state
         self.recording = False
+        self.last_reocrd_time = time.time()
 
         rospy.loginfo("PoseRecorder initialized. "
                       "Press 'r' to start/stop, '1'/'2'/'3' to toggle labels, 'q' to quit.")
 
     def pose_callback(self, msg):
         """Callback for pose updates."""
-        self.latest_pose = msg.O_T_EE
         pose = Pose()
-        pose.position.x = self.latest_pose[12]
-        pose.position.y = self.latest_pose[13]
-        pose.position.z = self.latest_pose[14]
-        if self.recording:
-            self.poses.append(pose)
-            print("Recorded pose: position=({}, {}, {}), labels={}".format(
-                pose.position.x, pose.position.y, pose.position.z, self.active_labels))
-            self.labels.append(list(self.active_labels))
+        pose.position = msg.pose.position
+        pose.orientation = msg.pose.orientation
+        self.current_pose = pose
 
     def toggle_recording(self):
         """Start or stop trajectory recording."""
@@ -81,6 +83,13 @@ class PoseRecorder:
         if all([self.active_labels[i] == 0 for i in range(3) if i != idx]):
             self.active_labels[idx] = 1 - self.active_labels[idx]
             rospy.loginfo("Label {} toggled -> {}".format(idx+1, self.active_labels))
+            if self.active_labels[idx] == 1:
+                self.active_doing_task = 1
+            if self.active_labels[idx] == 0:
+                self.active_doing_task = 0
+                for idx in range(min(len(self.doing_task), self.doing_task_buffer)):
+                    if len(self.doing_task) > idx:
+                        self.doing_task[-(idx+1)] = 0
         else:
             rospy.loginfo("Only one label can be active at a time. Clear current labels first.")
 
@@ -94,14 +103,15 @@ class PoseRecorder:
             os.makedirs(directory)
 
         with open(self.output_csv, 'w', newline='') as f:
+            print("Saving to {}".format(self.output_csv))
             writer = csv.writer(f)
-            writer.writerow(['x','y','z','qx','qy','qz','qw','label1','label2','label3'])
-            for pose, lbl in zip(self.poses, self.labels):
+            writer.writerow(['x','y','z','qx','qy','qz','qw','label1','label2','label3','doing_task'])
+            for pose, lbl, doing_task in zip(self.poses, self.labels, self.doing_task):
                 writer.writerow([
                     pose.position.x, pose.position.y, pose.position.z,
                     pose.orientation.x, pose.orientation.y,
                     pose.orientation.z, pose.orientation.w,
-                    lbl[0], lbl[1], lbl[2]
+                    lbl[0], lbl[1], lbl[2], doing_task
                 ])
         rospy.loginfo("Saved {} poses to {}".format(len(self.poses), self.output_csv))
 
@@ -122,8 +132,13 @@ class PoseRecorder:
         if not self.labels:
             return
         msg_array = []
-        for pose, lbl in zip(self.poses, self.labels):
-            msg_array += [pose.position.x, pose.position.y, pose.position.z] + lbl
+        for pose, lbl, doing_task in zip(self.poses, self.labels, self.doing_task):
+            roll, pitch, yaw = R.from_quat([
+                pose.orientation.x, pose.orientation.y,
+                pose.orientation.z, pose.orientation.w
+            ]).as_euler('xyz', degrees=False)
+            msg_array += [pose.position.x, pose.position.y, pose.position.z, yaw] + lbl + [doing_task]
+            print(msg_array[-8:])  # Print last 8 entries for debugging
         msg = Float32MultiArray()
         # Flatten list: [[1,0,0],[0,1,0]] → [1,0,0,0,1,0]
         msg.data = msg_array
@@ -150,6 +165,14 @@ class PoseRecorder:
                             self.publish_labels()
                         rospy.signal_shutdown("User quit.")
                         break
+                if self.recording and self.current_pose is not None:
+                    current_time = time.time()
+                    if current_time - self.last_reocrd_time >= self.dt:  # Record at 10 Hz
+                        self.poses.append(deepcopy(self.current_pose))
+                        self.labels.append(list(self.active_labels))
+                        self.doing_task.append(self.active_doing_task)
+                        self.last_reocrd_time = current_time
+                rospy.sleep(0.1)
         finally:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_attrs)
 
