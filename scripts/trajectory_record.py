@@ -37,11 +37,12 @@ class PoseRecorder:
         self.labels = []          # list of [l1, l2, l3]
         self.active_doing_task = 0 # 0 if not doing task, 1 if doing task
         self.doing_task = []       # buffer
-        self.doing_task_buffer = 7  # number of steps before end of task to mark as complete (This is a helper state for diffusion models)
+        self.doing_task_buffer = 20  # number of steps before end of task to mark as complete (This is a helper state for diffusion models)
         self.current_pose = None
         self.active_labels = [0,0,0]  # current one-hot state
         self.recording = False
         self.last_reocrd_time = time.time()
+        self.final_message_buffer = 50
 
         rospy.loginfo("PoseRecorder initialized. "
                       "Press 'r' to start/stop, '1'/'2'/'3' to toggle labels, 'q' to quit.")
@@ -60,9 +61,16 @@ class PoseRecorder:
             rospy.loginfo("Recording started...")
             self.poses = []
             self.labels = []
+            self.doing_task = []
             self.active_labels = [0,0,0]
         else:
-            print("Would you like to save the recorded trajectory? (y/n)")
+            for pose, lbl, doing_task in zip(self.poses, self.labels, self.doing_task):
+                roll_print, pitch_print, yaw_print = R.from_quat([
+                    pose.orientation.x, pose.orientation.y,
+                    pose.orientation.z, pose.orientation.w
+                ]).as_euler('xyz', degrees=False)
+                # print(pose.position.x, pose.position.y, pose.position.z, yaw_print, lbl, doing_task)  # Print last 8 entries for debugging
+            print("Would you like to save the recorded trajectory that has {} points? (y/n)".format(len(self.poses)))
             key = ''
             while key not in ['y','n']:
                 key = sys.stdin.read(1)
@@ -71,6 +79,7 @@ class PoseRecorder:
                     rospy.loginfo("Recording discarded.")
                     self.poses = []
                     self.labels = []
+                    self.doing_task = []
                     self.active_labels = [0,0,0]
                 if key == 'y':
                     rospy.loginfo("Saving and publishing...")
@@ -87,9 +96,9 @@ class PoseRecorder:
                 self.active_doing_task = 1
             if self.active_labels[idx] == 0:
                 self.active_doing_task = 0
-                for idx in range(min(len(self.doing_task), self.doing_task_buffer)):
-                    if len(self.doing_task) > idx:
-                        self.doing_task[-(idx+1)] = 0
+                for idx_l in range(len(self.doing_task) - self.doing_task_buffer, len(self.doing_task)):
+                    # print("Setting doing_task at {} to 0".format(idx_l))
+                    self.doing_task[idx_l] = 0
         else:
             rospy.loginfo("Only one label can be active at a time. Clear current labels first.")
 
@@ -138,7 +147,11 @@ class PoseRecorder:
                 pose.orientation.z, pose.orientation.w
             ]).as_euler('xyz', degrees=False)
             msg_array += [pose.position.x, pose.position.y, pose.position.z, yaw] + lbl + [doing_task]
-            print(msg_array[-8:])  # Print last 8 entries for debugging
+        final_state = msg_array[-8:]
+        for _ in range(self.final_message_buffer):
+            msg_array += final_state
+        # for idx in range(0, len(msg_array), 8):
+        #     print(msg_array[idx:idx+8])  # Print all entries for debugging
         msg = Float32MultiArray()
         # Flatten list: [[1,0,0],[0,1,0]] → [1,0,0,0,1,0]
         msg.data = msg_array
